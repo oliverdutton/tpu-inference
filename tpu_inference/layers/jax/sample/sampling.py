@@ -55,8 +55,13 @@ def fast_sample(
       block_topk_schedule = (5, 7, 9, 12, 16),
       topk_schedule = (8, 16),
       interpret = False,
-    )    
-    logits = topp_mask(logits, tpu_sampling_metadata.top_p, replace_val=-1e12)
+    )
+    
+    # top-p
+    probs = jax.nn.softmax(logits, axis=-1)
+    logits = jnp.where(
+    probs.cumsum(-1) <= tpu_sampling_metadata.top_p, logits, -1e12)
+    #logits = topp_mask(logits, tpu_sampling_metadata.top_p, replace_val=-1e12)
     temperatures = tpu_sampling_metadata.temperature.astype(logits.dtype)
     temperatures = jnp.expand_dims(temperatures, axis=-1)
     logits /= temperatures
