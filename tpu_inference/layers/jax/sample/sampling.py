@@ -46,17 +46,14 @@ def fast_sample(
     # (B, vocab_size)
     input_logits = logits
         
-    logits = logits.astype(jnp.float32)
     logits, logits_global_index, is_valid = tax.top_dynamic_k(
       logits,
       tpu_sampling_metadata.top_k,
       max_k = 128,
       block_size = 8,
-      block_topk_schedule = (5, 7, 9, 12, 16),
-      topk_schedule = (8, 16),
-      interpret = False,
+      block_topk_schedule = (5, 9),
     )
-    
+    logits = logits.astype(jnp.float32)
     # top-p
     probs = jax.nn.softmax(logits, axis=-1)
     logits = jnp.where(
