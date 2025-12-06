@@ -38,6 +38,7 @@ class ShardingAxisName2D:
     VOCAB = ('data', 'model')
 
 
+
 ShardingAxisName = ShardingAxisName2D
 
 
@@ -58,6 +59,11 @@ ShardingAxisName = ShardingAxisName2D
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Binary search over float32 bits.
+
+Includes fast algorithms top-k masking and top-p masking on probability
+distributions.
+"""
 
 def int32_bsearch(batch_shape: Sequence[int],
                   predicate: Callable[[jnp.ndarray], jnp.ndarray]):
@@ -350,6 +356,7 @@ class TPUSupportedSamplingMetadata:
     top_p: Optional[jnp.ndarray] = None
     do_sampling: bool = False
     logprobs: bool = False
+
 
 
 # ============================================================================
