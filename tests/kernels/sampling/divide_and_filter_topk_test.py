@@ -1,9 +1,8 @@
 import jax
-from tpu_inference.kernels.sampling.topk import topk
+from tpu_inference.kernels.sampling.divide_and_filter_topk import topk
 import jax.numpy as jnp
 import pytest
 
-# from tallax import tax
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
 from tpu_inference.kernels.sampling.test_utils import verify_topk_output
 
@@ -12,7 +11,7 @@ from tpu_inference.kernels.sampling.test_utils import verify_topk_output
     is_cpu_platform(),
     reason="Top-k tests require TPU/GPU - CPU uses interpret mode which is slow"
 )
-def test_topk():
+def test_divide_and_filter_topk():
     """Test topk Pallas implementation."""
     num_queries = 16
     vocab_size = 201088

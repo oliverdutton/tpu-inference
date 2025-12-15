@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Top-K selection with dynamic convergence.
+"""Divide-and-filter top-K selection with dynamic convergence.
 
 Extracted from tallax: https://github.com/oliverdutton/tallax
 """
