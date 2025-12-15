@@ -25,7 +25,7 @@ from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
 
 from tpu_inference.kernels.sampling.bitonic_topk import bitonic_topk_refs, bitonic_topk_arrays
-from tpu_inference.kernels.sampling.topk_convergence_theory import calculate_depth_thresholds
+from tpu_inference.kernels.sampling.divide_and_filter_topk_convergence_theory import calculate_depth_thresholds
 from tpu_inference.kernels.sampling.utils import unrolled_fori_loop, NUM_LANES, NUM_SUBLANES, pad, log2, get_dtype_info, iota_tile, to_32bit_dtype
 
 def binned_topk(

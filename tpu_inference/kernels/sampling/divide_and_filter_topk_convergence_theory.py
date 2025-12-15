@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Top-K convergence probability theory calculations.
+"""Divide-and-filter top-K convergence probability theory calculations.
 
 Extracted from tallax: https://github.com/oliverdutton/tallax
 """
