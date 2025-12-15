@@ -10,7 +10,7 @@ from tpu_inference.layers.common.binary_search import topk_mask, topp_mask
 from tpu_inference.layers.common.sharding import ShardingAxisName
 from tpu_inference.layers.jax.sample.sampling_metadata import \
     TPUSupportedSamplingMetadata
-from tallax import tax
+from tallax.sampling import sample as fast_sample
 
 _SAMPLING_EPS = 1e-5
 
@@ -22,8 +22,6 @@ def fallback_sample(
 ) -> jax.Array:
     # (B, vocab_size)
     greedy_sampled = jnp.argmax(logits, axis=-1)
-    if not tpu_sampling_metadata.do_sampling:
-        return greedy_sampled
 
     logits = logits.astype(jnp.float32)
     logits = topk_mask(logits, tpu_sampling_metadata.top_k, replace_val=-1e12)
@@ -35,45 +33,11 @@ def fallback_sample(
 
     # (batch_size,)
     next_tokens = jax.random.categorical(rng, logits)
-    return greedy_sampled, next_tokens
 
-
-def fast_sample(
-    rng: jax.Array,
-    logits: jax.Array,
-    tpu_sampling_metadata: TPUSupportedSamplingMetadata,
-) -> jax.Array:
-    # (B, vocab_size)
-    input_logits = logits
-        
-    logits, logits_global_index, is_valid = tax.top_dynamic_k(
-      logits,
-      tpu_sampling_metadata.top_k,
-      max_k = 128,
-      block_size = 8,
-      block_topk_schedule = (5, 9),
-    )
-    logits = logits.astype(jnp.float32)
-    # top-p
-    probs = jax.nn.softmax(logits, axis=-1)
-    logits = jnp.where(
-    probs.cumsum(-1) <= tpu_sampling_metadata.top_p, logits, -1e12)
-    #logits = topp_mask(logits, tpu_sampling_metadata.top_p, replace_val=-1e12)
-    temperatures = tpu_sampling_metadata.temperature.astype(logits.dtype)
-    temperatures = jnp.expand_dims(temperatures, axis=-1)
-    logits /= temperatures
-
-    # (batch_size,)
-    next_tokens = jax.vmap(lambda x, y: x[y])(
-      logits_global_index,
-      jax.random.categorical(rng, logits),
-    )
-    greedy_sampled = logits_global_index[:,0]
-    return jax.lax.cond(
-      is_valid.all(),
-      lambda: (greedy_sampled, next_tokens),
-      lambda: fallback_sample(rng, input_logits, tpu_sampling_metadata)
-    )
+    # Note: avoid using the sample result when temperature < _SAMPLING_EPS
+    # If temperature < 0, logits /= temperatures will flip the result, causing error.
+    return jnp.where(tpu_sampling_metadata.temperature < _SAMPLING_EPS,
+                     greedy_sampled, next_tokens)
 
 
 @functools.partial(
@@ -87,22 +51,21 @@ def sample(
     tpu_sampling_metadata: TPUSupportedSamplingMetadata,
 ) -> jax.Array:
     # (B, vocab_size)
+    greedy_sampled = jnp.argmax(logits, axis=-1)
+    if not tpu_sampling_metadata.do_sampling:
+        return greedy_sampled
+        
     if tpu_sampling_metadata.do_sampling:
         # Unshard the logits explicity to avoid latency increase.
         logits = jax.lax.with_sharding_constraint(
             logits, NamedSharding(mesh, P(ShardingAxisName.ATTN_DATA, None)))
     
-    greedy_sampled, next_tokens = jax.lax.cond(
-      (tpu_sampling_metadata.top_k < 128).all(), 
+    return jax.lax.cond(
+      (tpu_sampling_metadata.top_k <= 128).all(), 
       lambda: fast_sample(rng, input_logits, tpu_sampling_metadata) 
       lambda: fallback_sample(rng, input_logits, tpu_sampling_metadata)
     )
-     
-    # Note: avoid using the sample result when temperature < _SAMPLING_EPS
-    # If temperature < 0, logits /= temperatures will flip the result, causing error.
-    return jnp.where(tpu_sampling_metadata.temperature < _SAMPLING_EPS,
-                     greedy_sampled, next_tokens)
-    
+
 
 def compute_logprobs(logits: jax.Array) -> jax.Array:
     return jax.nn.log_softmax(logits, axis=-1)
