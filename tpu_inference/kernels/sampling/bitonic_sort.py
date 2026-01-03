@@ -218,10 +218,6 @@ def _get_full_size(inputs):
   return len(leaves) * leaves[0].shape[0]
 
 
-def concrete_and_true(b):
-  return type(b) == bool and b
-
-
 def _compute_is_descending(
   stage: int,
   tile_start_offset: int,
@@ -231,17 +227,13 @@ def _compute_is_descending(
   substage: int | None = None,
 ):
   # Check if we can optimize based on stage comparisons
-  if concrete_and_true(stage < log2(NUM_SUBLANES)) or concrete_and_true(
-    stage >= log2(full_size)
-  ):
+  if stage < log2(NUM_SUBLANES) or stage >= log2(full_size):
     # Same pattern for all tiles
     return create_bit_indicator(
       stage, tile_local_offset + sort_dim_offset
     )
 
-  if concrete_and_true(stage >= log2(NUM_SUBLANES)) and concrete_and_true(
-    stage < log2(full_size)
-  ):
+  if stage >= log2(NUM_SUBLANES) and stage < log2(full_size):
     # Bit set by tile_offset, constant within tile, differs across tiles
     return create_bit_indicator(
       stage, tile_start_offset + sort_dim_offset
