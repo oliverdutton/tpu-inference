@@ -84,7 +84,6 @@ def bitonic_topk_arrays(
   k: int,
   num_keys: int = 1,
   axis: int = 1,
-  min_padded_dim0: int | None = None,
 ):
   """
   Progressive bitonic merge for top-k selection.
@@ -94,12 +93,6 @@ def bitonic_topk_arrays(
       k: Number of top elements to return (default: NUM_LANES)
       num_keys: Number of sort keys (default: 1)
       axis: Axis along which to perform top-k (0 or 1)
-      min_padded_dim0: Can be used to tradeoff ALU vs lane permute intensity.
-        E.g. (8, 2048) can be put into compressed format of 16 (8, 128) tiles
-        which induces 4 lane permute ops at the end which have high latency.
-        Alternatively padding to (128, 2048) leads to an uncompressed transpose
-        of 256 (8, 128) tiles and avoids lane permutes but greatly increases
-        ALU work. Can be tuned.
 
   Returns:
       List of JAX arrays of shape (original_batch_size, k) with top-k elements
@@ -114,9 +107,7 @@ def bitonic_topk_arrays(
   if unpadded_k > unpadded_sort_dim:
     raise ValueError
   if sort_axis == 1:
-    if min_padded_dim0 is None:
-      min_padded_dim0 = shape[0]
-    padded_shape = _compute_padded_shape(min_padded_dim0, shape[1], k=k)
+    padded_shape = _compute_padded_shape(shape[0], shape[1], k=k)
   elif sort_axis == 0:
     padded_shape = (
       ceil_multiple(shape[0], max(NUM_SUBLANES, k)),
@@ -334,7 +325,6 @@ def _compute_is_descending(
     "batch_size",
     "stage",
     "sort_dim_offset",
-    "full_size",
     "max_reduce",
   ),
 )
@@ -346,7 +336,6 @@ def bitonic_sort_substage(
   batch_size: int,
   stage: int | None = None,
   sort_dim_offset: int = 0,
-  full_size: int = None,
   max_reduce: bool = False,
 ):
   """Perform intra-tile bitonic comparison for sort.
@@ -358,7 +347,6 @@ def bitonic_sort_substage(
     batch_size: Batch size for computing tile offsets
     stage: Current sorting stage
     sort_dim_offset: Offset for bitonic order calculation
-    full_size: Full size of the array
     max_reduce: If True, discard lower half (for top-k)
 
   Returns:
@@ -368,8 +356,7 @@ def bitonic_sort_substage(
   separation = 2**substage
   # if still arrays, we make it into one big tile so its sanitized to list[list[jax.ndarray]]
   arrs_tiles = list(map(jax.tree.leaves, arrs_tiles))
-  if full_size is None:
-    full_size = len(arrs_tiles[0]) * arrs_tiles[0][0].shape[0]
+  full_size = len(arrs_tiles[0]) * arrs_tiles[0][0].shape[0]
   if separation < NUM_SUBLANES or separation >= full_size:
     # we need to permute within tiles
     axis = int(separation >= full_size)
