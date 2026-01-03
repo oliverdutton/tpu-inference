@@ -48,7 +48,7 @@ def test_bitonic_topk(shape, dtype, axis, k):
   def topk_refs(values_ref, indices_ref, out_values_ref, out_indices_ref):
     """Top-k refs kernel using bitonic_topk_arrays."""
     result_values, result_indices = bitonic_topk_arrays(
-      [values_ref[...], indices_ref[...]], k=k, num_keys=1, axis=axis
+      [values_ref[...], indices_ref[...]], k=k, axis=axis
     )
     out_values_ref[...] = result_values
     out_indices_ref[...] = result_indices
@@ -95,7 +95,7 @@ def test_top1_pallas(shape, dtype, axis):
   def top1_refs(values_ref, indices_ref, out_values_ref, out_indices_ref):
     """Top1 refs kernel."""
     result_values, result_indices = max_arrays(
-      [values_ref[...], indices_ref[...]], num_keys=1, axis=axis
+      [values_ref[...], indices_ref[...]], axis=axis
     )
     out_values_ref[...] = result_values
     out_indices_ref[...] = result_indices

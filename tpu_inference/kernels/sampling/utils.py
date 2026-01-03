@@ -21,6 +21,18 @@ NUM_SUBLANES = 8
 NUM_LANES = 128
 
 
+def is_cpu_platform():
+  """Check if code is running on CPU platform.
+
+  Returns:
+    True if running on CPU, False otherwise. Emits warning if on CPU.
+  """
+  is_cpu = jax.default_backend() == "cpu"
+  if is_cpu:
+    warnings.warn("Running on CPU, interpret=True will be used.")
+  return is_cpu
+
+
 def log2(x: int) -> int:
   """Returns ceiling of log2(x)."""
   if x == 0:

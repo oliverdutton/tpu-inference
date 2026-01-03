@@ -808,7 +808,7 @@ def top_bounded_k(
         jax.lax.all_gather(x, axis_name, axis=1)
         for x in (topk_logits, topk_idxs)
       ]
-      topk_logits, topk_idxs = _bitonic_topk_arrays(operands, k=max_k, num_keys=1)
+      topk_logits, topk_idxs = _bitonic_topk_arrays(operands, k=max_k)
       topk_logits = jnp.where(
         jax.lax.broadcasted_iota(jnp.int32, topk_logits.shape, 1) < k[:, None],
         topk_logits,

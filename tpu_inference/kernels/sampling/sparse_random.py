@@ -126,7 +126,6 @@ def sparse_random_categorical(
   # Find argmax of Gumbel-perturbed logits
   sampled_token_indices = max_arrays(
     [gumbel_logits, *indices],
-    num_keys=1,
     axis=axis,
   )[1:]
 
