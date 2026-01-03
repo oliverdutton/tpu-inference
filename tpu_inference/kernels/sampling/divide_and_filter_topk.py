@@ -9,10 +9,10 @@ from jax.experimental.pallas import tpu as pltpu
 from jax.experimental.custom_partitioning import custom_partitioning
 from jax.sharding import NamedSharding, PartitionSpec as P
 
-from tpu_inference.kernels.sampling.bitonic.topk import bitonic_topk_arrays as _bitonic_topk_arrays
+from tpu_inference.kernels.sampling.bitonic_topk import bitonic_topk_arrays as _bitonic_topk_arrays
 from tpu_inference.kernels.sampling.bitonic import bitonic_topk_in_vmem as bitonic_topk
 
-from tpu_inference.kernels.sampling.divide_and_filter_topk.convergence_theory import (
+from tpu_inference.kernels.sampling.convergence_theory import (
   calculate_depth_thresholds,
 )
 from tpu_inference.kernels.sampling.utils import (

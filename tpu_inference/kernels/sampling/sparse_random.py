@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 from jax.extend.random import threefry2x32_p
 
-from tpu_inference.kernels.sampling.bitonic.topk import max_arrays
+from tpu_inference.kernels.sampling.bitonic_topk import max_arrays
 
 
 def _bits_to_uniform(bits, dtype):

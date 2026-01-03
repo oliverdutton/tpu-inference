@@ -4,7 +4,7 @@ import jax.numpy as jnp
 
 import tpu_inference.kernels.sampling as tax
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
-from tpu_inference.kernels.sampling.test_utils import verify_sort_output
+from tests.kernels.sampling.test_utils import verify_sort_output
 
 
 def _should_skip_on_cpu(size):

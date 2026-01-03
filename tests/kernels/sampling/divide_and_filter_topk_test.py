@@ -2,9 +2,9 @@ import pytest
 import jax
 import jax.numpy as jnp
 from jax.experimental import pallas as pl
-from tpu_inference.kernels.sampling.divide_and_filter_topk.topk import topk
+from tpu_inference.kernels.sampling.divide_and_filter_topk import topk
 from tpu_inference.kernels.sampling.utils import is_cpu_platform, NUM_LANES
-from tpu_inference.kernels.sampling.test_utils import verify_topk_output
+from tests.kernels.sampling.test_utils import verify_topk_output
 
 
 @pytest.mark.parametrize(

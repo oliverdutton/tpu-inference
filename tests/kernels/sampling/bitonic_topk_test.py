@@ -4,9 +4,9 @@ import jax
 import jax.numpy as jnp
 from jax.experimental import pallas as pl
 from tpu_inference.kernels.sampling.bitonic import bitonic_topk_in_vmem
-from tpu_inference.kernels.sampling.bitonic.topk import max_arrays
+from tpu_inference.kernels.sampling.bitonic_topk import max_arrays
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
-from tpu_inference.kernels.sampling.test_utils import verify_topk_output
+from tests.kernels.sampling.test_utils import verify_topk_output
 
 
 @pytest.mark.parametrize(
