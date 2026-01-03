@@ -10,7 +10,6 @@ from jax.experimental.custom_partitioning import custom_partitioning
 from jax.sharding import NamedSharding, PartitionSpec as P
 
 from tpu_inference.kernels.sampling.bitonic_topk import bitonic_topk_arrays as _bitonic_topk_arrays
-from tpu_inference.kernels.sampling.bitonic import bitonic_topk_in_vmem as bitonic_topk
 
 from tpu_inference.kernels.sampling.convergence_theory import (
   calculate_depth_thresholds,
@@ -809,7 +808,7 @@ def top_bounded_k(
         jax.lax.all_gather(x, axis_name, axis=1)
         for x in (topk_logits, topk_idxs)
       ]
-      topk_logits, topk_idxs = bitonic_topk(operands, k=max_k)
+      topk_logits, topk_idxs = _bitonic_topk_arrays(operands, k=max_k, num_keys=1)
       topk_logits = jnp.where(
         jax.lax.broadcasted_iota(jnp.int32, topk_logits.shape, 1) < k[:, None],
         topk_logits,
