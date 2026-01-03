@@ -218,7 +218,6 @@ def compare_and_swap(
   num_keys: int,
   is_descending: jax.Array | None,
   is_right_half=None,
-  has_unique_key=False,
 ):
   """Compare and conditionally swap array pairs.
 
@@ -228,7 +227,6 @@ def compare_and_swap(
     num_keys: Number of arrays to use as sort keys
     is_descending: Boolean mask for sort direction (None implies ascending)
     is_right_half: Mask for subtile comparisons. Needed for handling ties in values correctly.
-    has_unique_key: Whether first key is guaranteed unique (optimizes sort)
 
   Returns:
     Tuple of (sorted_lefts, sorted_rights) or sorted values for subtile.
@@ -238,7 +236,6 @@ def compare_and_swap(
   def _compare_pair(i, left, right):
     handle_subtile_ties = (
       is_right_half is not None
-      and not has_unique_key
       and num_arrs != num_keys
       and i == num_keys - 1
     )
