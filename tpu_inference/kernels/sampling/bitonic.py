@@ -28,15 +28,12 @@ from tpu_inference.kernels.sampling.utils import (
   NUM_SUBLANES,
   ceil_multiple,
 )
-from tpu_inference.kernels.sampling.bitonic_sort import (
+from tpu_inference.kernels.sampling.bitonic_topk import (
+  bitonic_topk_arrays,
   bitonic_sort_maybe_rolled,
   _compute_padded_shape as _compute_padded_shape_for_sort,
   compute_pair_slice_start_index as compute_pair_slice_start_index,
   compare_and_swap as compare_and_swap,
-)
-from tpu_inference.kernels.sampling.bitonic_topk import (
-  bitonic_topk_arrays,
-  _compute_padded_shape as _compute_padded_shape_for_topk,
 )
 # SymInt removed - not needed for tpu-inference
 
