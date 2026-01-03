@@ -11,7 +11,7 @@ from jax.sharding import NamedSharding, PartitionSpec as P
 
 from tpu_inference.kernels.sampling.bitonic_topk import bitonic_topk_arrays as _bitonic_topk_arrays
 
-from tpu_inference.kernels.sampling.convergence_theory import (
+from tpu_inference.kernels.sampling.topk_convergence_theory import (
   calculate_depth_thresholds,
 )
 from tpu_inference.kernels.sampling.utils import (

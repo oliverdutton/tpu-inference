@@ -21,18 +21,6 @@ NUM_SUBLANES = 8
 NUM_LANES = 128
 
 
-def is_cpu_platform():
-  """Check if code is running on CPU platform.
-
-  Returns:
-    True if running on CPU, False otherwise. Emits warning if on CPU.
-  """
-  is_cpu = jax.default_backend() == "cpu"
-  if is_cpu:
-    warnings.warn("Running on CPU, interpret=True will be used.")
-  return is_cpu
-
-
 def log2(x: int) -> int:
   """Returns ceiling of log2(x)."""
   if x == 0:
@@ -152,11 +140,6 @@ def standardize(x, nans=True, zeros=True):
   return x
 
 
-def is_32bit(x):
-  """Check if array has 32-bit dtype."""
-  return x.dtype.itemsize == 4
-
-
 def to_32bit_dtype(operand_dtype):
   """Convert dtype to corresponding 32-bit dtype."""
   for dtype_class, dtype_32bit in {
@@ -167,11 +150,6 @@ def to_32bit_dtype(operand_dtype):
     if jnp.issubdtype(operand_dtype, dtype_class):
       return dtype_32bit
   raise ValueError("dtype not recognized")
-
-
-def same_shape_dtype(ref1, ref2):
-  """Check if two refs have same shape and dtype."""
-  return (ref1.dtype == ref2.dtype) and (ref1.shape == ref2.shape)
 
 
 def canonicalize_operand(operand):
@@ -388,15 +366,6 @@ def transpose_list_of_lists(tree):
   outer = jax.tree.structure(type(tree)("*") * len(tree))
   inner = jax.tree.structure(type(tree[0])("*") * len(tree[0]))
   return jax.tree.transpose(outer, inner, tree)
-
-
-def set_cummax(vs):
-  """Compute cumulative maximum of a sequence."""
-  o = [vs[0]]
-  for v in vs[1:]:
-    if v > o[-1]:
-      o.append(v)
-  return type(vs)(o)
 
 
 def map_batch_dim_to_smaller_than_hardware_tile_size(
