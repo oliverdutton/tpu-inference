@@ -82,7 +82,6 @@ def _compute_padded_shape(
 def bitonic_topk_arrays(
   operands: list[jax.Array],
   k: int,
-  num_keys: int = 1,
   axis: int = 1,
 ):
   """
@@ -91,7 +90,6 @@ def bitonic_topk_arrays(
   Args:
       operands: List of JAX arrays of shape (dim0, dim1)
       k: Number of top elements to return (default: NUM_LANES)
-      num_keys: Number of sort keys (default: 1)
       axis: Axis along which to perform top-k (0 or 1)
 
   Returns:
@@ -122,7 +120,7 @@ def bitonic_topk_arrays(
   batch_size = arrs[0].shape[batch_axis]
   assert batch_size <= NUM_LANES
   _bitonic_sort_substage = functools.partial(
-    bitonic_sort_substage, batch_size=batch_size, num_keys=num_keys
+    bitonic_sort_substage, batch_size=batch_size
   )
 
   def max_reduce_stage(arrs_tiles, reduce_stage):
@@ -196,8 +194,8 @@ def bitonic_topk_arrays(
     return [arr[:unpadded_k, : shape[batch_axis]] for arr in arrs]
 
 
-def max_arrays(operands, num_keys, axis):
-  arrs = bitonic_topk_arrays(operands, num_keys=num_keys, k=1, axis=axis)
+def max_arrays(operands, axis):
+  arrs = bitonic_topk_arrays(operands, k=1, axis=axis)
   return [x.squeeze(axis) for x in arrs]
 
 
@@ -205,8 +203,7 @@ def compare_and_swap(
   lefts,
   rights,
   *,
-  num_keys: int,
-  is_descending: jax.Array | None,
+  is_descending: jax.Array | bool | None,
   is_right_half=None,
 ):
   """Compare and conditionally swap array pairs.
@@ -214,51 +211,26 @@ def compare_and_swap(
   Args:
     lefts: Tuple of left arrays to compare
     rights: Tuple of right arrays to compare
-    num_keys: Number of arrays to use as sort keys
     is_descending: Boolean mask for sort direction (None implies ascending)
     is_right_half: Mask for subtile comparisons. Needed for handling ties in values correctly.
 
   Returns:
     Tuple of (sorted_lefts, sorted_rights) or sorted values for subtile.
   """
-  num_arrs = len(lefts)
-
-  def _compare_pair(i, left, right):
-    handle_subtile_ties = (
-      is_right_half is not None
-      and num_arrs != num_keys
-      and i == num_keys - 1
+  left, right = lefts[0], rights[0]
+  if is_right_half is not None:
+    # swap
+    left, right = (
+      jnp.where(is_right_half, right, left),
+      jnp.where(is_right_half, left, right),
     )
 
-    if handle_subtile_ties:
-      left, right = (
-        jnp.where(is_right_half, right, left),
-        jnp.where(is_right_half, left, right),
-      )
-
-    mask = (
-      left > right
-      if type(is_descending) == bool and is_descending
-      else right > left
-    )
-    mask = mask.astype(jnp.int32)
-
-    if is_right_half is not None and not handle_subtile_ties:
-      mask = jnp.bitwise_xor(mask, is_right_half.astype(jnp.int32))
-    return mask
-
-  masks = tuple(
-    _compare_pair(i, left, right)
-    for i, (left, right) in enumerate(zip(lefts, rights, strict=True))
+  mask = (
+    # if possible resolve is_descending at compile time
+    left > right
+    if type(is_descending) == bool and is_descending
+    else right > left
   )
-
-  ties = [(left == right) for left, right in zip(lefts, rights, strict=True)]
-
-  mask = masks[0]
-  for k in range(1, num_keys):
-    # Break ties in primary key with secondary key comparison
-    mask = jnp.where(ties[k - 1], masks[k], mask)
-    ties[k] &= ties[k - 1]
 
   if is_descending is not None and type(is_descending) != bool:
     # Dynamic descending mask
@@ -321,7 +293,6 @@ def _compute_is_descending(
   jax.jit,
   static_argnames=(
     "substage",
-    "num_keys",
     "batch_size",
     "stage",
     "sort_dim_offset",
@@ -332,7 +303,6 @@ def bitonic_sort_substage(
   arrs_tiles,
   *,
   substage,
-  num_keys: int,
   batch_size: int,
   stage: int | None = None,
   sort_dim_offset: int = 0,
@@ -343,7 +313,6 @@ def bitonic_sort_substage(
   Args:
     arrs_tiles: Tuple of lists of tile arrays
     substage: Substage within current stage (determines separation = 2**substage)
-    num_keys: Number of sort keys
     batch_size: Batch size for computing tile offsets
     stage: Current sorting stage
     sort_dim_offset: Offset for bitonic order calculation
@@ -397,7 +366,6 @@ def bitonic_sort_substage(
           if not max_reduce
           else True,
           is_right_half=is_right_half,
-          num_keys=num_keys,
         )
       ):
         outs_tiles[arr_idx][idx] = out
@@ -432,7 +400,6 @@ def bitonic_sort_substage(
           )
           if not max_reduce
           else True,
-          num_keys=num_keys,
         )
       ):
         outs_tiles[arr_idx][idx] = out_left
