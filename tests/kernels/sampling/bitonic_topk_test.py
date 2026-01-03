@@ -3,8 +3,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 from jax.experimental import pallas as pl
-from tpu_inference.kernels.sampling.bitonic import bitonic_topk_in_vmem
-from tpu_inference.kernels.sampling.bitonic_topk import max_arrays
+from tpu_inference.kernels.sampling.bitonic_topk import bitonic_topk_arrays, max_arrays
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
 from tests.kernels.sampling.test_utils import verify_topk_output
 
@@ -27,7 +26,7 @@ from tests.kernels.sampling.test_utils import verify_topk_output
 @pytest.mark.parametrize("dtype", [jnp.bfloat16, jnp.float32, jnp.int32])
 @pytest.mark.parametrize("axis", [1])
 def test_bitonic_topk(shape, dtype, axis, k):
-  """Test bitonic_topk for both axes with k values."""
+  """Test bitonic_topk using bitonic_topk_arrays wrapped in pallas."""
   interpret = is_cpu_platform()
   if interpret and (shape[1] > 256):
     pytest.skip("Test too large for CPU, as compilation is very slow")
@@ -40,11 +39,32 @@ def test_bitonic_topk(shape, dtype, axis, k):
     arr = jax.random.randint(key, shape, 0, 1000).astype(dtype)
 
   k = min(k, shape[axis])
-  # Use the full bitonic_topk_in_vmem API
-  # Pass only arr - the function will automatically create and return argsort indices
-  result_values, result_indices = bitonic_topk_in_vmem(
-    arr, k=k, num_keys=1, interpret=interpret
-  )
+
+  # Create indices array for argsort
+  indices = jax.lax.broadcasted_iota(jnp.int32, shape, axis)
+  out_shape = list(shape)
+  out_shape[axis] = k
+
+  def topk_refs(values_ref, indices_ref, out_values_ref, out_indices_ref):
+    """Top-k refs kernel using bitonic_topk_arrays."""
+    result_values, result_indices = bitonic_topk_arrays(
+      [values_ref[...], indices_ref[...]], k=k, num_keys=1, axis=axis
+    )
+    out_values_ref[...] = result_values
+    out_indices_ref[...] = result_indices
+
+  @functools.partial(jax.jit, static_argnames=("interpret",))
+  def topk_pallas(values, indices, interpret=False):
+    return pl.pallas_call(
+      topk_refs,
+      out_shape=[
+        jax.ShapeDtypeStruct(out_shape, values.dtype),
+        jax.ShapeDtypeStruct(out_shape, jnp.int32),
+      ],
+      interpret=interpret,
+    )(values, indices)
+
+  result_values, result_indices = topk_pallas(arr, indices, interpret=interpret)
 
   valid = verify_topk_output(arr, (result_values, result_indices), axis=axis)
   assert valid.all(), (
