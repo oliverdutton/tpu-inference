@@ -17,8 +17,6 @@ from tpu_inference.kernels.sampling.cumsum import cumsum_arrays
 from tpu_inference.kernels.sampling.gather import take_along_axis_arrays
 from tpu_inference.kernels.sampling.utils import NUM_SUBLANES, NUM_LANES
 
-_SAMPLING_EPS = 1e-5
-
 
 def broadcast_to(x, shape):
   if x.shape[1] == shape[1] and shape[0] % NUM_LANES == 0 and x.shape[0] == 1:
@@ -81,6 +79,7 @@ def top_p_and_sample_arrays(
   temperature,
   vocab_size,
   replace_val,
+  sampling_eps,
   dim0_offset: int = 0,
 ):
   """
@@ -129,7 +128,7 @@ def top_p_and_sample_arrays(
     # take sampled_indices[1], the token idx
   )[1]
   greedy_sampled = topk_idx[0, :]
-  return jnp.where(temperature < _SAMPLING_EPS, greedy_sampled, next_tokens)
+  return jnp.where(temperature < sampling_eps, greedy_sampled, next_tokens)
 
 
 def top_p_and_sample_refs(
@@ -143,6 +142,7 @@ def top_p_and_sample_refs(
   *,
   vocab_size: int,
   replace_val: float,
+  sampling_eps: float,
 ):
   """
   Fused kernel implementing top-p filtering, temperature scaling, and sampling.
@@ -157,6 +157,7 @@ def top_p_and_sample_refs(
       sampled_tokens_ref: Reference to output sampled tokens
       vocab_size: Vocabulary size
       replace_val: Value to replace filtered logits with
+      sampling_eps: if temperature below eps, greedy token is taken
   """
   sampled_tokens_ref[...] = top_p_and_sample_arrays(
     topk_logits=topk_logits_ref[...],
@@ -166,6 +167,7 @@ def top_p_and_sample_refs(
     temperature=temperature_ref[...],
     vocab_size=vocab_size,
     replace_val=replace_val,
+    sampling_eps=sampling_eps,
     dim0_offset=dim0_offset_ref[0],  # Extract scalar from SMEM array
   )
 
@@ -179,6 +181,7 @@ def _top_p_and_sample(
   *,
   vocab_size: int,
   replace_val: float,
+  sampling_eps: float,
   interpret: bool = False,
   dim0_offset: int = 0,
 ) -> jax.Array:
@@ -193,6 +196,7 @@ def _top_p_and_sample(
       temperature: Temperature values, scalar or shape (batch_size,)
       vocab_size: Vocabulary size for sampling
       replace_val: Value to replace filtered logits with
+      sampling_eps: if temperature below eps, greedy token is taken
       interpret: If True, run in CPU interpret mode (default: False)
       dim0_offset: Offset for dim0 (batch) axis, used for sharding (default: 0)
                    Must be computed outside pallas_call using lax.axis_index
@@ -205,6 +209,7 @@ def _top_p_and_sample(
       top_p_and_sample_refs,
       vocab_size=vocab_size,
       replace_val=replace_val,
+      sampling_eps=sampling_eps,
     ),
     in_specs=(
       pl.BlockSpec(),
@@ -231,6 +236,7 @@ def _top_p_and_sample(
   static_argnames=(
     "vocab_size",
     "replace_val",
+    "sampling_eps",
     "interpret",
   ),
 )
@@ -243,6 +249,7 @@ def top_p_and_sample(
   *,
   vocab_size: int,
   replace_val: float,
+  sampling_eps: float,
   interpret: bool = False,
 ) -> jax.Array:
   """
@@ -258,6 +265,7 @@ def top_p_and_sample(
       temperature: Temperature values.
       vocab_size: Total vocabulary size.
       replace_val: Value to replace filtered logits with.
+      sampling_eps: if temperature below eps, greedy token is taken
       interpret: If True, run in CPU interpret mode (default: False).
 
   Returns:
@@ -276,6 +284,7 @@ def top_p_and_sample(
       temperature,
       vocab_size=vocab_size,
       replace_val=replace_val,
+      sampling_eps=sampling_eps,
       interpret=interpret,
     )
 
@@ -303,6 +312,7 @@ def top_p_and_sample(
         temperature,
         vocab_size=vocab_size,
         replace_val=replace_val,
+        sampling_eps=sampling_eps,
         interpret=interpret,
         dim0_offset=dim0_offset,
       )
