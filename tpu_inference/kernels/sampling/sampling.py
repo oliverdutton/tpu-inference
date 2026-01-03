@@ -9,7 +9,7 @@ from tpu_inference.kernels.sampling.divide_and_filter_topk import top_bounded_k
 
 
 @functools.partial(
-  jax.jit, static_argnames=("max_k", "num_bins", "bins_topm_schedule")
+  jax.jit, static_argnames=("max_k", "num_bins", "bins_topm_schedule", "sampling_eps", "replace_val")
 )
 def topk_topp_and_sample(
   rng_key,
@@ -18,6 +18,8 @@ def topk_topp_and_sample(
   max_k: int,
   num_bins: int | None = None,
   bins_topm_schedule: int | None = None,
+  sampling_eps: float = 1e-5,
+  replace_val: float = -1e12,
 ):
   """Combined top-k, top-p filtering, and sampling for vLLM inference.
 
@@ -28,6 +30,8 @@ def topk_topp_and_sample(
     max_k: Maximum k value for top-k computation.
     num_bins: Optional number of bins for divide-and-filter algorithm.
     bins_topm_schedule: Optional custom schedule for binned top-m computation.
+    sampling_eps: Use greedy token if temperature < eps
+    replace_val: Replace padding entries in probabilities with constant
 
   Returns:
     Sampled token indices.
@@ -36,7 +40,7 @@ def topk_topp_and_sample(
   topk_logits, topk_idxs = top_bounded_k(
     logits,
     k=tpu_sampling_metadata.top_k,
-    replace_val=-1e12,
+    replace_val=replace_val,
     max_k=max_k,
     num_bins=num_bins,
     bins_topm_schedule=bins_topm_schedule,
@@ -49,5 +53,6 @@ def topk_topp_and_sample(
     top_p=tpu_sampling_metadata.top_p,
     temperature=tpu_sampling_metadata.temperature,
     vocab_size=vocab_size,
-    replace_val=-1e12,
+    replace_val=replace_val,
+    sampling_eps=sampling_eps,
   )
