@@ -27,15 +27,13 @@ from tpu_inference.kernels.sampling.utils import (
   map_batch_dim_to_smaller_than_hardware_tile_size,
   join_tiles_to_array,
   split_array_to_tiles,
-  maybe_static_jit,
 )
 # SymInt removed - not needed for tpu-inference
 
 
 @functools.partial(
-  maybe_static_jit,
-  static_argnames=("num_keys", "has_unique_key"),
-  maybe_static_argnames=("is_descending",),
+  jax.jit,
+  static_argnames=("num_keys", "has_unique_key", "is_descending"),
 )
 def compare_and_swap(
   lefts,
@@ -257,7 +255,7 @@ def _compute_is_descending(
 
 
 @functools.partial(
-  maybe_static_jit,
+  jax.jit,
   static_argnames=(
     "substage",
     "num_keys",
@@ -265,8 +263,9 @@ def _compute_is_descending(
     "full_size",
     "concat_threshold",
     "max_reduce",
+    "stage",
+    "sort_dim_offset",
   ),
-  maybe_static_argnames=("stage", "sort_dim_offset"),
 )
 def bitonic_sort_substage(
   arrs_tiles,

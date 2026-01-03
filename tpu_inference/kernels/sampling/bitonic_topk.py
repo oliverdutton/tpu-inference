@@ -21,7 +21,7 @@ from tpu_inference.kernels.sampling.utils import (
   split_array_to_tiles,
   map_batch_dim_to_smaller_than_hardware_tile_size,
 )
-from tpu_inference.kernels.sampling.bitonic.sort import (
+from tpu_inference.kernels.sampling.bitonic_sort import (
   bitonic_sort_substage,
 )
 
