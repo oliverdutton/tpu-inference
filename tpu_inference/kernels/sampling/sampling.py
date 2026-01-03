@@ -4,7 +4,7 @@ vLLM top-k top-p sampling, using two pallas functions
 
 import functools
 import jax
-from tpu_inference.kernels.sampling.vllm_top_p_and_sample import top_p_and_sample
+from tpu_inference.kernels.sampling.top_p_and_sample import top_p_and_sample
 from tpu_inference.kernels.sampling.divide_and_filter_topk import top_bounded_k
 
 

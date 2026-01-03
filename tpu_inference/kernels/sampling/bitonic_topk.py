@@ -15,7 +15,6 @@ from tpu_inference.kernels.sampling.utils import (
   NUM_LANES,
   NUM_SUBLANES,
   log2,
-  flatten,
   ceil_multiple,
   iota_tile,
   pad,
@@ -300,33 +299,12 @@ def compute_pair_slice_start_index(i, separation, slice_length=1):
   return pair_idx * 2 * separation + slice_idx * slice_length
 
 
-def _resplit(operands, target_tile_dim0: int):
-  def _resplit_inner(operand):
-    tiles = jax.tree.leaves(operand)
-    dim0 = tiles[0].shape[0]
-    if dim0 == target_tile_dim0:
-      return tiles
-    elif dim0 > target_tile_dim0:
-      return flatten([
-        jnp.split(tile, dim0 // target_tile_dim0, axis=0) for tile in tiles
-      ])
-    else:
-      l = target_tile_dim0 // dim0
-      return [
-        jnp.concatenate(operand[i * l : (i + 1) * l], axis=0)
-        for i in range(len(tiles) // l)
-      ]
-
-  return [_resplit_inner(x) for x in operands]
-
-
 def _compute_is_descending(
   stage: int,
   tile_start_offset: int,
   tile_local_offset: jax.Array,
   sort_dim_offset: int,
   full_size: int,
-  substage: int | None = None,
 ):
   # Check if we can optimize based on stage comparisons
   if stage < log2(NUM_SUBLANES) or stage >= log2(full_size):
@@ -357,7 +335,6 @@ def _compute_is_descending(
     "stage",
     "sort_dim_offset",
     "full_size",
-    "concat_threshold",
     "max_reduce",
   ),
 )
@@ -370,19 +347,19 @@ def bitonic_sort_substage(
   stage: int | None = None,
   sort_dim_offset: int = 0,
   full_size: int = None,
-  concat_threshold: int | None = None,
   max_reduce: bool = False,
 ):
   """Perform intra-tile bitonic comparison for sort.
 
   Args:
     arrs_tiles: Tuple of lists of tile arrays
-    axis: Axis along which to apply permutation (0 or 1)
-    separation: Distance between elements to compare within tile
-    stage: Current sorting stage
+    substage: Substage within current stage (determines separation = 2**substage)
     num_keys: Number of sort keys
-    sort_dim_offset: Offset for bitonic order calculation
     batch_size: Batch size for computing tile offsets
+    stage: Current sorting stage
+    sort_dim_offset: Offset for bitonic order calculation
+    full_size: Full size of the array
+    max_reduce: If True, discard lower half (for top-k)
 
   Returns:
     Tuple of lists of tiles with updated values
@@ -400,8 +377,6 @@ def bitonic_sort_substage(
       separation if axis == 0 else ((separation * batch_size) // full_size)
     )
 
-    # we need hardware tiles to lower the permute
-    arrs_tiles = _resplit(arrs_tiles, NUM_SUBLANES)
     # Compute is_descending for each tile based on bitonic pattern
     tile_local_offset = iota_tile(0) + (iota_tile(1) // batch_size) * full_size
     is_right_half = create_bit_indicator(
@@ -431,7 +406,6 @@ def bitonic_sort_substage(
             tile_local_offset=tile_local_offset,
             sort_dim_offset=sort_dim_offset,
             full_size=full_size,
-            substage=substage,
           )
           if not max_reduce
           else True,
@@ -442,15 +416,6 @@ def bitonic_sort_substage(
         outs_tiles[arr_idx][idx] = out
   else:
     # Comparison between tiles
-
-    # concatting tiles simplifies the code, but hides optimizationsy from the compiler. So until tiles are large (the concat_threshold) we keep them as hardware tile size
-    tile_size = (
-      separation
-      if ((concat_threshold is not None) and (separation >= concat_threshold))
-      else NUM_SUBLANES
-    )
-
-    arrs_tiles = _resplit(arrs_tiles, tile_size)
     tile_shape = arrs_tiles[0][0].shape
     num_tiles = len(arrs_tiles[0])
     tile_separation = separation // tile_shape[0]
@@ -477,7 +442,6 @@ def bitonic_sort_substage(
             tile_local_offset=tile_local_offset,
             sort_dim_offset=sort_dim_offset,
             full_size=full_size,
-            substage=substage,
           )
           if not max_reduce
           else True,
