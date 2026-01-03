@@ -7,8 +7,6 @@ import jax
 import jax.numpy as jnp
 import pandas as pd
 
-from tpu_inference.kernels.sampling.utils import is_cpu_platform
-
 
 @jax.jit
 def exact_match(xs, ys):
@@ -18,94 +16,6 @@ def exact_match(xs, ys):
       jax.tree.map(lambda x, y: jnp.array_equal(x, y, equal_nan=True), xs, ys)
     )
   ).all()
-
-
-def verify_sort_output(
-  operands,
-  outputs,
-  num_keys: int,
-  return_argsort: bool = False,
-  descending: bool = False,
-  is_stable: bool = False,
-  interpret: bool | None = None,
-):
-  """Validate sort outputs against XLA reference implementation.
-
-  Args:
-      operands: Input operand(s) that were sorted
-      outputs: Output from sort function to validate
-      num_keys: Number of arrays to use as sort keys
-      return_argsort: Whether argsort indices were returned
-      descending: Sort in descending order
-      is_stable: Whether sort should be stable
-      interpret: Run in interpret mode
-
-  Returns:
-      Boolean indicating if outputs are valid
-  """
-  if interpret is None:
-    interpret = is_cpu_platform()
-
-  kwargs = dict(
-    return_argsort=return_argsort,
-    descending=descending,
-    num_keys=num_keys,
-    is_stable=is_stable,
-  )
-
-  if is_stable:
-    # Exact match required for stable sort
-    out_xla = xla_equivalent_sort(operands, **kwargs)
-    valid = bool(exact_match(outputs, out_xla))
-
-    if not valid:
-      m = jnp.zeros(out_xla[0].shape, dtype=bool)
-      for ox, op in zip(out_xla, outputs):
-        m |= ~((ox == op) | (jnp.isnan(ox) & jnp.isnan(op)))
-      debug_msg = []
-      for ox, op in zip(out_xla, outputs):
-        debug_msg.append(f"xla {ox[m]}\noutput {op[m]}")
-      debug_output = "\n".join(debug_msg)
-      print(
-        f"Output does not match XLA output for stable sort:\n{debug_output}"
-      )
-
-    return valid
-
-  else:
-    # Check output is valid permutation with correct relative order
-    outputs_stable_sorted = xla_equivalent_sort(
-      outputs,
-      num_keys=num_keys,
-      is_stable=True,
-      descending=descending,
-    )
-    valid = bool(exact_match(outputs, outputs_stable_sorted))
-    if not valid:
-      m = jnp.zeros(outputs_stable_sorted[0].shape, dtype=bool)
-      for ox, op in zip(outputs_stable_sorted, outputs):
-        m |= ~((ox == op) | (jnp.isnan(ox) & jnp.isnan(op)))
-      debug_msg = []
-      for ox, op in zip(outputs_stable_sorted, outputs):
-        debug_msg.append(f"sorted {ox[m]}\noutput {op[m]}")
-      debug_output = "\n".join(debug_msg)
-      print(f"Output is not sorted:\n{debug_output}")
-      return False
-
-    narrs = len(outputs)
-    operands_fully_sorted = xla_equivalent_sort(
-      operands, **{**kwargs, "num_keys": narrs}
-    )
-    outputs_fully_sorted = xla_equivalent_sort(
-      outputs, **{**kwargs, "num_keys": narrs, "return_argsort": False}
-    )
-    valid_permute = bool(
-      exact_match(operands_fully_sorted, outputs_fully_sorted)
-    )
-    if not valid_permute:
-      print("Output is not a valid permutation of input")
-
-    return valid and valid_permute
 
 
 def uniquely_define_topk(logits, k):
@@ -228,47 +138,3 @@ def benchmark(_run):
     print(res.to_string(index=False))
   else:
     print("No jit functions found in trace.")
-
-
-@functools.partial(
-  jax.jit,
-  static_argnames=("descending", "return_argsort", "is_stable", "num_keys"),
-)
-def xla_equivalent_sort(
-  operand,
-  num_keys: int,
-  is_stable: bool = False,
-  return_argsort: bool = False,
-  descending: bool = False,
-) -> tuple[jax.Array, ...]:
-  """Reference implementation using XLA sort for correctness testing.
-
-  Args:
-    operand: Input array(s) to sort
-    num_keys: Number of sort keys
-    is_stable: Whether to perform stable sort
-    return_argsort: Whether to return argsort indices
-    descending: Sort in descending order
-
-  Returns:
-    Tuple of sorted arrays (and optionally argsort indices)
-  """
-  operands = jax.tree.leaves(operand)
-
-  if return_argsort:
-    operands.append(jax.lax.broadcasted_iota(jnp.int32, operands[0].shape, 1))
-  if descending and is_stable:
-    operands.insert(
-      num_keys, -jax.lax.broadcasted_iota(jnp.int32, operands[0].shape, 1)
-    )
-    num_keys += 1
-
-  outs = jax.lax.sort(operands, num_keys=num_keys, is_stable=is_stable)
-
-  if descending and is_stable:
-    outs = list(outs)
-    outs.pop(num_keys - 1)
-  if descending:
-    outs = tuple(x[..., ::-1] for x in outs)
-
-  return tuple(outs)
