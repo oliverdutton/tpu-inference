@@ -2,7 +2,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 import numpy as np
-from tpu_inference.kernels.sampling.vllm_sampling import topk_topp_and_sample
+from tpu_inference.kernels.sampling.sampling import topk_topp_and_sample
 # NOTE: tpu_inference_sampling_as_standalone_file was not copied over (excluded per requirements)
 # from tpu_inference.kernels.sampling.vllm.tpu_inference_sampling_as_standalone_file import (
 #   TPUSupportedSamplingMetadata,
