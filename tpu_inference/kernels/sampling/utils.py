@@ -282,13 +282,8 @@ def iota_tile(dim, tile_shape=(NUM_SUBLANES, NUM_LANES)):
 
 
 def create_bit_indicator(bit_position: int, index):
-  """Create mask indicating which elements have specific bit set.
-
-  Returns bool when bit_position is static int, int32 (0 or 1) when dynamic.
-  """
-  if type(bit_position) == int:
-    return (index & (1 << bit_position)) > 0
-  return (index >> bit_position) & 1
+  """Returns if the bit in bit_position is 1 or 0."""
+  return (index & (1 << bit_position)) > 0
 
 
 def to_compressed_transpose_format(arr):
