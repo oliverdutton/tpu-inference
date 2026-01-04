@@ -26,6 +26,9 @@ def broadcast_to(x, shape):
       shape[0] // NUM_SUBLANES,
       axis=0,
     )
+  if x.shape[1] == shape[1] and shape[0] <= NUM_SUBLANES and x.shape[0] == 1:
+    # similar issue for (1, 128) to (5, 128)
+    return pltpu.repeat(x, shape[0], axis=0)
   return jnp.broadcast_to(x, shape)
 
 
