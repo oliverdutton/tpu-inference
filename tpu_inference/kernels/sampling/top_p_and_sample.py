@@ -32,7 +32,7 @@ def broadcast_to(x, shape):
   return jnp.broadcast_to(x, shape)
 
 
-def top_p_mask(*, topk_logits, p, replace_val, axis):
+def top_p_mask(*, topk_logits, p, replace_val, axis, no_pallas_code=False):
   """
   Apply top-p filtering mask to sorted logits.
 
@@ -65,8 +65,11 @@ def top_p_mask(*, topk_logits, p, replace_val, axis):
   # vLLM current implementation uses binary search, computing a threshold.
   # so ties at the threshold are all included
   # we replicate that behavior here
+  
+  # we test the jax fn, rather than wrapped in a pallas fn. However, due to bug work around we use pltpu.repeat. We have this awkward if statement to support both test in jax and usage in Pallas
+  broadcast_fn = jnp.broadcast_to if no_pallas_code else broadcast_to
   thresholds = take_along_axis_arrays(
-    topk_logits, broadcast_to(threshold_idx, shape), axis=0
+    topk_logits, broadcast_fn(threshold_idx, shape), axis=0
   )
   topp_logits = jnp.where(topk_logits >= thresholds, topk_logits, replace_val)
 
