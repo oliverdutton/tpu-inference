@@ -96,6 +96,7 @@ def bitonic_topk_arrays(
       List of JAX arrays of shape (original_batch_size, k) with top-k elements
   """
   operands, shape = canonicalize_operand(operands)
+  dtypes = [x.dtype for x in operands]
   sort_axis = axis
   batch_axis = 1 - sort_axis
   unpadded_k = k
@@ -185,13 +186,15 @@ def bitonic_topk_arrays(
       from_compressed_transpose_format(tiles, dim0=batch_size)
       for tiles in arrs_tiles
     ]
-    return [arr[: shape[batch_axis], :unpadded_k] for arr in arrs]
+    arrs = [arr[: shape[batch_axis], :unpadded_k] for arr in arrs]
   else:
     arrs = [
       join_tiles_to_array(tiles, dim0=ceil_multiple(k, NUM_SUBLANES))
       for tiles in arrs_tiles
     ]
-    return [arr[:unpadded_k, : shape[batch_axis]] for arr in arrs]
+    arrs = [arr[:unpadded_k, : shape[batch_axis]] for arr in arrs]
+    
+  return [arr.astype(dtype) for arr, dtype in zip(arrs, dtypes, strict=True)]
 
 
 def max_arrays(operands, axis):
