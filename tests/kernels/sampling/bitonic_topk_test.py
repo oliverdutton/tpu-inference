@@ -3,6 +3,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 from jax.experimental import pallas as pl
+from jax.experimental.pallas import tpu as pltpu
 from tpu_inference.kernels.sampling.bitonic_topk import bitonic_topk_arrays, max_arrays
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
 from tests.kernels.sampling.test_utils import verify_topk_output
@@ -55,14 +56,16 @@ def test_bitonic_topk(shape, dtype, axis, k):
 
   @functools.partial(jax.jit, static_argnames=("interpret",))
   def topk_pallas(values, indices, interpret=False):
-    return pl.pallas_call(
-      topk_refs,
-      out_shape=[
+    call_kwargs = {
+      "out_shape": [
         jax.ShapeDtypeStruct(out_shape, values.dtype),
         jax.ShapeDtypeStruct(out_shape, jnp.int32),
       ],
-      interpret=interpret,
-    )(values, indices)
+      "interpret": interpret,
+    }
+    if not interpret:
+      call_kwargs["compiler_params"] = pltpu.CompilerParams(vmem_limit_bytes=int(0.9 * 2**27))
+    return pl.pallas_call(topk_refs, **call_kwargs)(values, indices)
 
   result_values, result_indices = topk_pallas(arr, indices, interpret=interpret)
 
@@ -102,14 +105,16 @@ def test_top1_pallas(shape, dtype, axis):
 
   @functools.partial(jax.jit, static_argnames=("interpret",))
   def top1_pallas(values, indices, interpret=False):
-    return pl.pallas_call(
-      top1_refs,
-      out_shape=[
+    call_kwargs = {
+      "out_shape": [
         jax.ShapeDtypeStruct(out_shape_1d, values.dtype),
         jax.ShapeDtypeStruct(out_shape_1d, jnp.int32),
       ],
-      interpret=interpret,
-    )(values, indices)
+      "interpret": interpret,
+    }
+    if not interpret:
+      call_kwargs["compiler_params"] = pltpu.CompilerParams(vmem_limit_bytes=int(0.9 * 2**27))
+    return pl.pallas_call(top1_refs, **call_kwargs)(values, indices)
 
   outputs = top1_pallas(arr, indices, interpret=interpret)
 
