@@ -3,13 +3,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from tpu_inference.kernels.sampling.sampling import topk_topp_and_sample
-# NOTE: tpu_inference_sampling_as_standalone_file was not copied over (excluded per requirements)
-# from tpu_inference.kernels.sampling.vllm.tpu_inference_sampling_as_standalone_file import (
-#   TPUSupportedSamplingMetadata,
-#   sample as vllm_sample,
-#   ShardingAxisName2D,
-#   Mesh,
-# )
+from tpu_inference.layers.jax.sample.sampling import _topk_topp_and_sample
+from tpu_inference.layers.jax.sample.sampling_metadata import TPUSupportedSamplingMetadata
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
 
 
@@ -41,22 +36,13 @@ def uniquely_define_topk(logits, k):
 @pytest.mark.parametrize("dtype", [jnp.bfloat16, jnp.float32])
 @pytest.mark.parametrize("case", ["random", "worst_case"])
 @pytest.mark.parametrize("seed", [42, 123, 456])
-@pytest.mark.skip(
-  reason="Test requires tpu_inference_sampling_as_standalone_file which was not copied over"
-)
 def test_topk_topp_and_sample(shape, dtype, case, seed):
-  """Test topk_topp_and_sample implementation against vLLM reference.
+  """Test topk_topp_and_sample implementation against layers reference.
 
   Tests both random and worst-case logits distributions.
-  Validates that pallas implementation matches vLLM sampling behavior exactly.
-  NOTE: Disabled - requires tpu_inference_sampling_as_standalone_file (not copied per requirements).
+  Validates that kernel implementation matches layers sampling behavior.
   """
   num_tokens, vocab_size = shape
-
-  # Create mesh for vLLM sample function
-  mesh = Mesh(
-    np.array([jax.devices()[0]]), axis_names=(ShardingAxisName2D.ATTN_DATA,)
-  )
 
   # Split main seed into all needed keys
   key = jax.random.PRNGKey(seed)
@@ -73,6 +59,7 @@ def test_topk_topp_and_sample(shape, dtype, case, seed):
     temperature=10
     ** jax.random.normal(temp_key, (num_tokens,), dtype=jnp.float32),
     do_sampling=True,
+    logprobs=False,
   )
 
   # Generate logits based on case
@@ -83,17 +70,17 @@ def test_topk_topp_and_sample(shape, dtype, case, seed):
   logits = jax.vmap(uniquely_define_topk)(logits, tpu_sampling_metadata.top_k)
 
   # Run both implementations
-  pallas_result = topk_topp_and_sample(
+  kernel_result = topk_topp_and_sample(
     sample_key, logits, tpu_sampling_metadata
   )
 
-  vllm_result = vllm_sample(sample_key, mesh, logits, tpu_sampling_metadata)
+  layers_result = _topk_topp_and_sample(sample_key, logits, tpu_sampling_metadata)
 
   # Compare results - expect exact match
   np.testing.assert_array_equal(
-    pallas_result,
-    vllm_result,
-    err_msg=f"Pallas sampling should exactly match vLLM sampling for "
+    kernel_result,
+    layers_result,
+    err_msg=f"Kernel sampling should exactly match layers sampling for "
     f"shape={shape}, dtype={dtype}, case={case}, seed={seed}",
   )
 
