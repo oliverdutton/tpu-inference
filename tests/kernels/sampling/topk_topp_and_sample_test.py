@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from tpu_inference.kernels.sampling import topk_topp_and_sample as pallas_topk_topp_and_sample
-from tpu_inference.layers.jax.sample.sampling import tpu_inference_topk_topp_and_sample
+from tpu_inference.layers.jax.sample.sampling import _topk_topp_and_sample as tpu_inference_topk_topp_and_sample
 from tpu_inference.layers.jax.sample.sampling_metadata import TPUSupportedSamplingMetadata
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
 from tpu_inference.kernels.sampling.test_utils import uniquely_define_topk
