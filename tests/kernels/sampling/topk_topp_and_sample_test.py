@@ -6,7 +6,7 @@ from tpu_inference.kernels.sampling import topk_topp_and_sample as pallas_topk_t
 from tpu_inference.layers.jax.sample.sampling import _topk_topp_and_sample as tpu_inference_topk_topp_and_sample
 from tpu_inference.layers.jax.sample.sampling_metadata import TPUSupportedSamplingMetadata
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
-from tpu_inference.kernels.sampling.test_utils import uniquely_define_topk
+from test.kernels.sampling.test_utils import uniquely_define_topk
 
 
 @pytest.mark.parametrize(
@@ -24,7 +24,7 @@ from tpu_inference.kernels.sampling.test_utils import uniquely_define_topk
 @pytest.mark.parametrize("case", ["random", "worst_case"])
 @pytest.mark.parametrize("max_k", [5, 17, 64, 128, 137])
 @pytest.mark.parametrize("seed", [42, 123, 456])
-def testtpu_inference_topk_topp_and_sample(shape, dtype, case, max_k, seed):
+def test_topk_topp_and_sample(shape, dtype, case, max_k, seed):
   """Test topk_topp_and_sample implementation against layers reference.
 
   Tests both random and worst-case logits distributions.
@@ -72,27 +72,3 @@ def testtpu_inference_topk_topp_and_sample(shape, dtype, case, max_k, seed):
     err_msg=f"Kernel sampling should exactly match layers sampling for "
     f"shape={shape}, dtype={dtype}, case={case}, seed={seed}",
   )
-
-
-if __name__ == "__main__":
-  print("Running topk_topp_and_sample tests...")
-
-  shapes = [(16, 16384), (13, 11792)]
-  dtypes = [jnp.bfloat16, jnp.float32]
-  cases = ["random", "worst_case"]
-  seeds = [42, 123, 456]
-
-  for shape in shapes:
-    for dtype in dtypes:
-      for case in cases:
-        for seed in seeds:
-          print(
-            f"\nTesting shape={shape}, dtype={dtype}, case={case}, seed={seed}..."
-          )
-          testtpu_inference_topk_topp_and_sample(shape, dtype, case, seed)
-          print("  ✓ Passed")
-
-  print("\nAll topk_topp_and_sample tests passed!")
-
-
-
