@@ -8,7 +8,6 @@ from vllm.v1.outputs import LogprobsTensors
 
 from tpu_inference import envs
 from tpu_inference.layers.common.binary_search import topk_mask, topp_mask
-from tpu_inference.kernels.sampling import top_k as fast_top_k, topk_topp_and_sample as fast_topk_topp_and_sample
 from tpu_inference.layers.common.sharding import ShardingAxisName
 from tpu_inference.layers.jax.sample.sampling_metadata import \
     TPUSupportedSamplingMetadata
@@ -52,27 +51,13 @@ def sample(
     tpu_sampling_metadata: TPUSupportedSamplingMetadata,
 ) -> jax.Array:
     # (B, vocab_size)
-    if tpu_sampling_metadata.do_sampling and envs.FLASH_SAMPLING_TOPK_THRESHOLD <= 0:
+    if tpu_sampling_metadata.do_sampling:
         # Unshard the logits explicity to avoid latency increase.
         logits = jax.lax.with_sharding_constraint(
             logits, NamedSharding(mesh, P(ShardingAxisName.ATTN_DATA, None)))
     greedy_sampled = jnp.argmax(logits, axis=-1)
     if not tpu_sampling_metadata.do_sampling:
         return greedy_sampled
-
-    if envs.FLASH_SAMPLING_TOPK_THRESHOLD > 0:
-      return jax.lax.cond(
-        (tpu_sampling_metadata.top_k <= envs.FLASH_SAMPLING_TOPK_THRESHOLD).all(),
-        functools.partial(
-          fast_topk_topp_and_sample,
-          max_k=envs.FLASH_SAMPLING_TOPK_THRESHOLD,
-          sampling_eps=SAMPLING_EPS,
-          replace_val=REPLACE_VAL,
-        ),
-        _topk_topp_and_sample,
-        rng, logits, tpu_sampling_metadata
-      )
-
     return _topk_topp_and_sample(rng, logits, tpu_sampling_metadata)
 
 
