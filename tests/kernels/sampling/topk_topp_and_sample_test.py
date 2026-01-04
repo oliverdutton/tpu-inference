@@ -2,8 +2,8 @@ import pytest
 import jax
 import jax.numpy as jnp
 import numpy as np
-from tpu_inference.kernels.sampling import topk_topp_and_sample as pallas_topk_topp_and_sample
-from tpu_inference.layers.jax.sample.sampling import _topk_topp_and_sample as tpu_inference_topk_topp_and_sample
+from tpu_inference.kernels.sampling import topk_topp_and_sample as pallas_sample
+from tpu_inference.layers.jax.sample.sampling import _sample as tpu_inference_sample
 from tpu_inference.layers.jax.sample.sampling_metadata import TPUSupportedSamplingMetadata
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
 from tests.kernels.sampling.test_utils import uniquely_define_topk
@@ -24,7 +24,7 @@ from tests.kernels.sampling.test_utils import uniquely_define_topk
 @pytest.mark.parametrize("case", ["random", "worst_case"])
 @pytest.mark.parametrize("max_k", [5, 17, 64, 128, 137])
 @pytest.mark.parametrize("seed", [42, 123, 456])
-def test_topk_topp_and_sample(shape, dtype, case, max_k, seed):
+def test_sample(shape, dtype, case, max_k, seed):
   """Test topk_topp_and_sample implementation against layers reference.
 
   Tests both random and worst-case logits distributions.
@@ -48,6 +48,7 @@ def test_topk_topp_and_sample(shape, dtype, case, max_k, seed):
     ** jax.random.normal(temp_key, (num_tokens,), dtype=jnp.float32),
     do_sampling=True,
     logprobs=False,
+    use_pallas_kernel=True,
   )
 
   # Generate logits based on case
@@ -58,11 +59,11 @@ def test_topk_topp_and_sample(shape, dtype, case, max_k, seed):
   logits = jax.vmap(uniquely_define_topk)(logits, tpu_sampling_metadata.top_k)
 
   # Run both implementations
-  pallas_result = pallas_topk_topp_and_sample(
+  pallas_result = pallas_sample(
     sample_key, logits, tpu_sampling_metadata, max_k=max_k
   )
 
-  tpu_inference_result = tpu_inference_topk_topp_and_sample(sample_key, logits, tpu_sampling_metadata)
+  tpu_inference_result = tpu_inference_sample(sample_key, logits, tpu_sampling_metadata)
 
   # Compare results - expect exact match
   # barring f32 summation order errors affecting top-p which are rare
