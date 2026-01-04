@@ -502,36 +502,39 @@ class CompilationManager:
                                                logits_sharding)
             for do_sampling in (True, False):
                 for logprobs in (True, False):
-                    if do_sampling:
-                        temperature = np.full((num_reqs, ),
-                                              0.7,
-                                              dtype=np.float32)
-                        top_k = np.full((num_reqs, ), 20, dtype=np.int32)
-                        top_p = np.full((num_reqs, ), 0.8, dtype=np.float32)
-                        (temperature, top_k, top_p) = device_array(
-                            self.runner.mesh, (temperature, top_k, top_p),
-                            sharding=sampling_metadata_sharding)
-                    else:
-                        temperature = None
-                        top_k = None
-                        top_p = None
-
-                    sampling_metadata = TPUSupportedSamplingMetadata(
-                        temperature=temperature,
-                        top_k=top_k,
-                        top_p=top_p,
-                        do_sampling=do_sampling,
-                        logprobs=logprobs)
-                    self._run_compilation(
-                        f"worker{self.runner.rank} sample",
-                        sample,
-                        self.runner.rng_params_for_sampling,
-                        self.runner.mesh,
-                        logits,
-                        sampling_metadata,
-                        num_reqs=num_reqs,
-                        do_sampling=do_sampling,
-                    )
+                    for use_pallas_kernel in (True, False):
+                        if do_sampling:
+                            temperature = np.full((num_reqs, ),
+                                                  0.7,
+                                                  dtype=np.float32)
+                            top_k = np.full((num_reqs, ), 20, dtype=np.int32)
+                            top_p = np.full((num_reqs, ), 0.8, dtype=np.float32)
+                            (temperature, top_k, top_p) = device_array(
+                                self.runner.mesh, (temperature, top_k, top_p),
+                                sharding=sampling_metadata_sharding)
+                        else:
+                            temperature = None
+                            top_k = None
+                            top_p = None
+    
+                        sampling_metadata = TPUSupportedSamplingMetadata(
+                            temperature=temperature,
+                            top_k=top_k,
+                            top_p=top_p,
+                            do_sampling=do_sampling,
+                            logprobs=logprobs,
+                            use_pallas_kernel=use_pallas_kernel if do_sampling else False,
+                        )
+                        self._run_compilation(
+                            f"worker{self.runner.rank} sample",
+                            sample,
+                            self.runner.rng_params_for_sampling,
+                            self.runner.mesh,
+                            logits,
+                            sampling_metadata,
+                            num_reqs=num_reqs,
+                            do_sampling=do_sampling,
+                        )
 
         self._sampling_precompiled = True
 
