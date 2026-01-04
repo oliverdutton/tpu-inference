@@ -106,12 +106,12 @@ def top_p_and_sample_arrays(
   topk_idx = topk_idx.T
   shape = topk_logits.shape
 
-  topp_logits = top_p_mask(
-    topk_logits=topk_logits, p=top_p, replace_val=replace_val, axis=0
+  topk_logits_scaled = topk_logits / temperature[None, :].astype(
+    topk_logits.dtype
   )
 
-  topp_logits_scaled = topp_logits / temperature[None, :].astype(
-    topp_logits.dtype
+  topp_logits_scaled = top_p_mask(
+    topk_logits=topk_logits_scaled, p=top_p, replace_val=replace_val, axis=0
   )
 
   # random key splitting is based on idx in ravelled array
