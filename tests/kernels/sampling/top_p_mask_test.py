@@ -60,6 +60,7 @@ def test_top_p_mask(shape, seed, p_threshold):
     p=p_array,
     replace_val=replace_val,
     axis=0,
+    no_pallas_code=True,
   )
 
   # Transpose back to (batch, vocab)
