@@ -4,7 +4,10 @@ import jax
 import jax.numpy as jnp
 from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
-from tpu_inference.kernels.sampling.bitonic_topk import bitonic_topk_arrays, max_arrays
+from tpu_inference.kernels.sampling.bitonic_topk import (
+  bitonic_topk_arrays as pallas_bitonic_topk_arrays,
+  max_arrays as pallas_max_arrays,
+)
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
 from tests.kernels.sampling.test_utils import verify_topk_output
 
@@ -48,7 +51,7 @@ def test_bitonic_topk(shape, dtype, axis, k):
 
   def topk_refs(values_ref, indices_ref, out_values_ref, out_indices_ref):
     """Top-k refs kernel using bitonic_topk_arrays."""
-    result_values, result_indices = bitonic_topk_arrays(
+    result_values, result_indices = pallas_bitonic_topk_arrays(
       [values_ref[...], indices_ref[...]], k=k, axis=axis
     )
     out_values_ref[...] = result_values
@@ -97,7 +100,7 @@ def test_top1_pallas(shape, dtype, axis):
 
   def top1_refs(values_ref, indices_ref, out_values_ref, out_indices_ref):
     """Top1 refs kernel."""
-    result_values, result_indices = max_arrays(
+    result_values, result_indices = pallas_max_arrays(
       [values_ref[...], indices_ref[...]], axis=axis
     )
     out_values_ref[...] = result_values

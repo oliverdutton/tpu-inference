@@ -2,7 +2,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 import numpy as np
-from tpu_inference.kernels.sampling.gather import take_along_axis
+from tpu_inference.kernels.sampling.gather import take_along_axis as pallas_take_along_axis
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
 
 
@@ -27,7 +27,7 @@ def test_take_along_axis(num_tokens, vocab_size, k, axis):
   expected = jnp.take_along_axis(values, indices, axis=axis)
 
   # Run Pallas take_along_axis
-  result = take_along_axis(
+  result = pallas_take_along_axis(
     values, indices, axis=axis, interpret=is_cpu_platform()
   )
 

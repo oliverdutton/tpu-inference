@@ -2,7 +2,7 @@ import pytest
 import jax
 import jax.numpy as jnp
 from jax.experimental import pallas as pl
-from tpu_inference.kernels.sampling.divide_and_filter_topk import topk
+from tpu_inference.kernels.sampling.divide_and_filter_topk import topk as pallas_topk
 from tpu_inference.kernels.sampling.utils import is_cpu_platform, NUM_LANES
 from tests.kernels.sampling.test_utils import verify_topk_output
 
@@ -36,7 +36,7 @@ def test_divide_and_filter_topk(shape, dtype):
     logits = jax.random.randint(key, shape, 0, 1000, dtype=dtype)
 
   # Run divide and filter top-k implementation
-  outputs = topk(
+  outputs = pallas_topk(
     logits,
     k=k,
     interpret=is_cpu_platform(),
@@ -86,7 +86,7 @@ def test_divide_and_filter_topk_worst_case_values(
     logits = logits.at[:, num_bins - 17 :: num_bins].add(1000)
 
   # Run divide and filter top-k implementation
-  outputs = topk(
+  outputs = pallas_topk(
     logits,
     k=k,
     interpret=is_cpu_platform(),

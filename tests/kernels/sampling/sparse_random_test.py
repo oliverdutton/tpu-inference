@@ -3,8 +3,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from tpu_inference.kernels.sampling.sparse_random import (
-  sparse_random_uniform,
-  sparse_random_categorical,
+  sparse_random_uniform as pallas_sparse_random_uniform,
+  sparse_random_categorical as pallas_sparse_random_categorical,
 )
 
 
@@ -29,7 +29,7 @@ def test_sparse_random_uniform(seed, minval, maxval):
   indices_1 = jax.random.randint(subkey2, sparse_shape, 0, dense_shape[1])
 
   # Generate sparse random values
-  sparse_uniform = sparse_random_uniform(
+  sparse_uniform = pallas_sparse_random_uniform(
     key,
     [indices_0, indices_1],
     dim1_size=dense_shape[1],
@@ -95,7 +95,7 @@ def test_sparse_random_categorical(seed, axis):
     )
 
   dense_result = jax.random.categorical(key, dense_masked, axis=axis)
-  sparse_result = sparse_random_categorical(
+  sparse_result = pallas_sparse_random_categorical(
     key,
     sparse_logits,
     [indices_0, indices_1],

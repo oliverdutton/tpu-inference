@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import jax.lax as lax
 import numpy as np
-import tpu_inference.kernels.sampling as tax
+from tpu_inference.kernels.sampling.cumsum import cumsum as pallas_cumsum
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
 
 
@@ -26,7 +26,7 @@ def test_cumsum(shape, axis, dtype, reverse):
   expected = lax.cumsum(x, axis=axis, reverse=reverse)
 
   interpret = is_cpu_platform()
-  actual = tax.cumsum(x, axis=axis, reverse=reverse, interpret=interpret)
+  actual = pallas_cumsum(x, axis=axis, reverse=reverse, interpret=interpret)
 
   # Use close match for float32, exact for int32
   if dtype == jnp.float32:
