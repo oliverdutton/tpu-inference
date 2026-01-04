@@ -7,6 +7,7 @@ from jax.sharding import PartitionSpec as P
 from vllm.v1.outputs import LogprobsTensors
 
 from tpu_inference import envs
+from tpu_inference.kernels.sampling import topk_topp_and_sample as pallas_sample
 from tpu_inference.layers.common.binary_search import topk_mask, topp_mask
 from tpu_inference.layers.common.sharding import ShardingAxisName
 from tpu_inference.layers.jax.sample.sampling_metadata import \
@@ -16,15 +17,15 @@ SAMPLING_EPS = 1e-5
 REPLACE_VAL = -1e12
 
 
-def _topk_topp_and_sample(
+def _sample(
     rng: jax.Array,
     logits: jax.Array,
     tpu_sampling_metadata: TPUSupportedSamplingMetadata,
 ) -> jax.Array:
-    logits = logits.astype(jnp.float32)
-
     # Compute greedy sample before applying temperature
     greedy_sampled = jnp.argmax(logits, axis=-1)
+
+    logits = logits.astype(jnp.float32)
 
     temperatures = tpu_sampling_metadata.temperature.astype(logits.dtype)
     temperatures = jnp.expand_dims(temperatures, axis=-1)
@@ -51,6 +52,13 @@ def sample(
     tpu_sampling_metadata: TPUSupportedSamplingMetadata,
 ) -> jax.Array:
     # (B, vocab_size)
+    if tpu_sampling_metadata.use_pallas_kernel:
+        return pallas_sample(
+            rng, logits, tpu_sampling_metadata,
+            max_k=envs.FLASH_SAMPLING_TOPK_THRESHOLD,
+            sampling_eps=SAMPLING_EPS,
+            replace_val=REPLACE_VAL,
+        )
     if tpu_sampling_metadata.do_sampling:
         # Unshard the logits explicity to avoid latency increase.
         logits = jax.lax.with_sharding_constraint(
@@ -58,7 +66,7 @@ def sample(
     greedy_sampled = jnp.argmax(logits, axis=-1)
     if not tpu_sampling_metadata.do_sampling:
         return greedy_sampled
-    return _topk_topp_and_sample(rng, logits, tpu_sampling_metadata)
+    return _sample(rng, logits, tpu_sampling_metadata)
 
 
 def compute_logprobs(logits: jax.Array) -> jax.Array:
