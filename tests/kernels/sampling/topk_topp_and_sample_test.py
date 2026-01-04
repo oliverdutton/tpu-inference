@@ -2,26 +2,13 @@ import pytest
 import jax
 import jax.numpy as jnp
 import numpy as np
-from tpu_inference.kernels.sampling.sampling import topk_topp_and_sample
-from tpu_inference.layers.jax.sample.sampling import _topk_topp_and_sample
+from tpu_inference.kernels.sampling import topk_topp_and_sample as pallas_topk_topp_and_sample
+from tpu_inference.layers.jax.sample.sampling import tpu_inference_topk_topp_and_sample
 from tpu_inference.layers.jax.sample.sampling_metadata import TPUSupportedSamplingMetadata
 from tpu_inference.kernels.sampling.utils import is_cpu_platform
+from tpu_inference.kernels.sampling.test_utils import uniquely_define_topk
 
 
-def uniquely_define_topk(logits, k):
-  """Ensure topk is well-defined by handling ties at the k-th boundary.
-
-  If more than k values are >= the k-th largest value, set extras to -inf.
-  This ensures topk is deterministic.
-  """
-  boundary_val = jax.lax.sort(logits)[-k]
-  mask = logits >= boundary_val
-  # if more than k values gt k-th largest value, set them to -inf
-  mask = mask & (mask.cumsum() > k)
-  return jnp.where(mask, float("-inf"), logits)
-
-
-# shapes on either side of the shape[1] pure bitonic vs divide and filter implementations
 @pytest.mark.parametrize(
   "shape",
   [
@@ -35,8 +22,9 @@ def uniquely_define_topk(logits, k):
 )
 @pytest.mark.parametrize("dtype", [jnp.bfloat16, jnp.float32])
 @pytest.mark.parametrize("case", ["random", "worst_case"])
+@pytest.mark.parametrize("max_k", [5, 17, 64, 128, 137])
 @pytest.mark.parametrize("seed", [42, 123, 456])
-def test_topk_topp_and_sample(shape, dtype, case, seed):
+def testtpu_inference_topk_topp_and_sample(shape, dtype, case, max_k, seed):
   """Test topk_topp_and_sample implementation against layers reference.
 
   Tests both random and worst-case logits distributions.
@@ -54,7 +42,7 @@ def test_topk_topp_and_sample(shape, dtype, case, seed):
   # We use varying k and temperatures of 10**normal(0,1) so that sometimes random gumbel noise dominates,
   # sometimes logits values dominates. Similarly, varying p threshold in top-p
   tpu_sampling_metadata = TPUSupportedSamplingMetadata(
-    top_k=jax.random.randint(topk_key, (num_tokens,), 1, 128, dtype=jnp.int32),
+    top_k=jax.random.randint(topk_key, (num_tokens,), 1, max_k+1, dtype=jnp.int32),
     top_p=jax.random.uniform(topp_key, (num_tokens,), dtype=jnp.float32),
     temperature=10
     ** jax.random.normal(temp_key, (num_tokens,), dtype=jnp.float32),
@@ -70,16 +58,17 @@ def test_topk_topp_and_sample(shape, dtype, case, seed):
   logits = jax.vmap(uniquely_define_topk)(logits, tpu_sampling_metadata.top_k)
 
   # Run both implementations
-  kernel_result = topk_topp_and_sample(
-    sample_key, logits, tpu_sampling_metadata
+  pallas_result = pallas_topk_topp_and_sample(
+    sample_key, logits, tpu_sampling_metadata, max_k=max_k
   )
 
-  layers_result = _topk_topp_and_sample(sample_key, logits, tpu_sampling_metadata)
+  tpu_inference_result = tpu_inference_topk_topp_and_sample(sample_key, logits, tpu_sampling_metadata)
 
   # Compare results - expect exact match
+  # barring f32 summation order errors affecting top-p which are rare
   np.testing.assert_array_equal(
-    kernel_result,
-    layers_result,
+    pallas_result,
+    tpu_inference_result,
     err_msg=f"Kernel sampling should exactly match layers sampling for "
     f"shape={shape}, dtype={dtype}, case={case}, seed={seed}",
   )
@@ -100,7 +89,10 @@ if __name__ == "__main__":
           print(
             f"\nTesting shape={shape}, dtype={dtype}, case={case}, seed={seed}..."
           )
-          test_topk_topp_and_sample(shape, dtype, case, seed)
+          testtpu_inference_topk_topp_and_sample(shape, dtype, case, seed)
           print("  ✓ Passed")
 
   print("\nAll topk_topp_and_sample tests passed!")
+
+
+
