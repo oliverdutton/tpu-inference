@@ -53,6 +53,22 @@ Visit our [documentation](https://docs.vllm.ai/projects/tpu/en/latest/) to learn
 
 *Check out a few v6e recipes [here](https://github.com/AI-Hypercomputer/tpu-recipes/tree/main/inference/trillium/vLLM)!*
 
+## Performance optimization
+
+vLLM TPU includes optimized kernels for large vocabulary models that can dramatically improve sampling performance:
+
+- **15-75× faster sampling** for large batches with constrained top-k values
+- Especially effective for models with vocabularies > 100K tokens (e.g., Gemini, Qwen)
+- Enable via `FLASH_SAMPLING_TOPK_THRESHOLD` environment variable
+
+**Quick start:**
+```bash
+export FLASH_SAMPLING_TOPK_THRESHOLD=128
+vllm serve meta-llama/Llama-3.1-8B --tensor_parallel_size=1
+```
+
+For details on this and other configuration options, see the [Configuration Guide](docs/configuration.md).
+
 ## Contribute
 
 We're always looking for ways to partner with the community to accelerate vLLM TPU development. If you're interested in contributing to this effort, check out the [Contributing guide](https://github.com/vllm-project/tpu-inference/blob/main/CONTRIBUTING.md) and [Issues](https://github.com/vllm-project/tpu-inference/issues) to start. We recommend filtering Issues on the [**good first issue** tag](https://github.com/vllm-project/tpu-inference/issues?q=is%3Aissue+state%3Aopen+label%3A%22good+first+issue%22) if it's your first time contributing.
