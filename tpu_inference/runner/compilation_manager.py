@@ -1,3 +1,4 @@
+import itertools
 import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
@@ -473,15 +474,20 @@ class CompilationManager:
                     ShardingAxisName.ATTN_DATA)) if dp_size > 1 else None
             logits = self._create_dummy_tensor((num_reqs, hsize), jnp.bfloat16,
                                                logits_sharding)
-            for do_sampling in (True, False):
+            for do_sampling, logprobs, use_pallas_kernel in itertools.product(
+                (True, False), (True, False),
+                # Doesn't compile pallas kernel if env not set
+                (envs.PALLAS_SAMPLING_TOPK_THRESHOLD > 0, False)
+            ):
                 if do_sampling:
-                    temperature = np.full((num_reqs, ), 0.7, dtype=np.float32)
+                    temperature = np.full((num_reqs, ),
+                                          0.7,
+                                          dtype=np.float32)
                     top_k = np.full((num_reqs, ), 20, dtype=np.int32)
                     top_p = np.full((num_reqs, ), 0.8, dtype=np.float32)
-                    (temperature, top_k,
-                     top_p) = device_array(self.runner.mesh,
-                                           (temperature, top_k, top_p),
-                                           sharding=sampling_metadata_sharding)
+                    (temperature, top_k, top_p) = device_array(
+                        self.runner.mesh, (temperature, top_k, top_p),
+                        sharding=sampling_metadata_sharding)
                 else:
                     temperature = None
                     top_k = None
@@ -492,6 +498,8 @@ class CompilationManager:
                     top_k=top_k,
                     top_p=top_p,
                     do_sampling=do_sampling,
+                    logprobs=logprobs,
+                    use_pallas_kernel=use_pallas_kernel if do_sampling else False,
                 )
                 self._run_compilation(
                     f"worker{self.runner.rank} sample",
@@ -503,6 +511,8 @@ class CompilationManager:
                     num_reqs=num_reqs,
                     do_sampling=do_sampling,
                 )
+
+        self._sampling_precompiled = True
 
     def _precompile_disagg_utils(self) -> None:
         if not is_disagg_enabled():
