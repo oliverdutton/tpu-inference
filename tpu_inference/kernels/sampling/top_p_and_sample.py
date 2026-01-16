@@ -328,8 +328,6 @@ def top_p_and_sample(
   sharded_top_p_and_sample.def_partition(
     infer_sharding_from_operands=infer_sharding_from_operands,
     partition=partition,
-    sharding_rule="b k, b k, r, b, b -> b",
-    need_replication_factors=("k", "r"),
   )
 
   return sharded_top_p_and_sample(

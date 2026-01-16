@@ -826,7 +826,6 @@ def top_bounded_k(
   _sharded_topk.def_partition(
     infer_sharding_from_operands=infer_sharding_from_operands,
     partition=partition,
-    sharding_rule="b v, b -> b k, b k",
   )
   return _sharded_topk(logits, k)
 
