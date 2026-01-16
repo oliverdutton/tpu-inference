@@ -6,7 +6,6 @@ import jax.numpy as jnp
 from jax import jit
 from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
-from jax.experimental.custom_partitioning import custom_partitioning
 from jax.sharding import NamedSharding, PartitionSpec as P
 
 from tpu_inference.kernels.sampling.bitonic_topk import bitonic_topk_arrays as _bitonic_topk_arrays
@@ -783,51 +782,52 @@ def top_bounded_k(
       interpret=interpret,
     )
 
-  @custom_partitioning
-  def _sharded_topk(logits, k):
+  # Get sharding info from inputs
+  logits_sharding = logits.sharding
+  if logits_sharding is None or not hasattr(logits_sharding, 'spec'):
+    # No sharding, just run unsharded
     return _closed_topk(logits, k)
 
-  def infer_sharding_from_operands(mesh, arg_shapes, result_shape):
-    logits_spec = arg_shapes[0].sharding.spec
-    return (NamedSharding(mesh, P(logits_spec[0], None)),) * 2
+  logits_spec = logits_sharding.spec
+  batch_axis = logits_spec[0] if len(logits_spec) > 0 else None
+  vocab_axis = logits_spec[1] if len(logits_spec) > 1 else None
 
-  def partition(mesh, arg_shapes, out_shapes):
-    if not guarantee_convergence:
-      raise NotImplementedError
-    arg_shardings, out_shardings = jax.tree.map(
-      lambda s: s.sharding, (arg_shapes, out_shapes)
+  # If not sharded on vocab axis, no need for shard_map
+  if vocab_axis is None:
+    return _closed_topk(logits, k)
+
+  if not guarantee_convergence:
+    raise NotImplementedError("Sharded top_k requires guarantee_convergence=True")
+
+  mesh = logits_sharding.mesh
+
+  def shmap_fn(logits, k):
+    topk_logits, topk_idxs = _closed_topk(logits, k)
+    # convert idxs to global frame
+    i = jax.lax.axis_index(vocab_axis)
+    topk_idxs += i * logits.shape[1]
+    # all-gather and top-k
+    operands = [
+      jax.lax.collapse(
+        jax.lax.all_gather(x, vocab_axis, axis=1),
+      1)
+      for x in (topk_logits, topk_idxs)
+    ]
+    topk_logits, topk_idxs = _bitonic_topk_arrays(operands, k=max_k)
+    topk_logits = jnp.where(
+      jax.lax.broadcasted_iota(jnp.int32, topk_logits.shape, 1) < k[:, None],
+      topk_logits,
+      replace_val,
     )
-    axis_name = arg_shardings[0].spec[1]
+    return topk_logits, topk_idxs
 
-    def shmap_fn(logits, k):
-      topk_logits, topk_idxs = _closed_topk(logits, k)
-      if axis_name is None:
-        return topk_logits, topk_idxs
-      # convert idxs to global frame
-      i = jax.lax.axis_index(axis_name)
-      topk_idxs += i * logits.shape[1]
-      # all-gather and top-k
-      operands = [
-        jax.lax.collapse(
-          jax.lax.all_gather(x, axis_name, axis=1),
-        1)
-        for x in (topk_logits, topk_idxs)
-      ]
-      topk_logits, topk_idxs = _bitonic_topk_arrays(operands, k=max_k)
-      topk_logits = jnp.where(
-        jax.lax.broadcasted_iota(jnp.int32, topk_logits.shape, 1) < k[:, None],
-        topk_logits,
-        replace_val,
-      )
-      return topk_logits, topk_idxs
-
-    return mesh, shmap_fn, out_shardings, arg_shardings
-
-  _sharded_topk.def_partition(
-    infer_sharding_from_operands=infer_sharding_from_operands,
-    partition=partition,
-  )
-  return _sharded_topk(logits, k)
+  return jax.shard_map(
+    shmap_fn,
+    mesh=mesh,
+    in_specs=(P(batch_axis, vocab_axis), P(batch_axis)),
+    out_specs=(P(batch_axis, None), P(batch_axis, None)),
+    check_vma=False,
+  )(logits, k)
 
 
 @functools.partial(

@@ -9,7 +9,6 @@ import jax.numpy as jnp
 from jax import jit, lax
 from jax.experimental import pallas as pl
 from jax.experimental.pallas import tpu as pltpu
-from jax.experimental.custom_partitioning import custom_partitioning
 from jax.sharding import NamedSharding, PartitionSpec as P
 
 from tpu_inference.kernels.sampling.sparse_random import sparse_random_categorical
@@ -278,10 +277,10 @@ def top_p_and_sample(
       Sampled tokens of shape (batch_size,).
   """
 
-  @custom_partitioning
-  def sharded_top_p_and_sample(
-    topk_logits, topk_idx, rng_key, top_p, temperature
-  ):
+  # Get sharding info from inputs
+  topk_logits_sharding = topk_logits.sharding
+  if topk_logits_sharding is None or not hasattr(topk_logits_sharding, 'spec'):
+    # No sharding, just run unsharded
     return _top_p_and_sample(
       topk_logits,
       topk_idx,
@@ -294,42 +293,52 @@ def top_p_and_sample(
       interpret=interpret,
     )
 
-  def infer_sharding_from_operands(mesh, arg_shapes, result_shape):
-    # Output follows batch dimension of first input (replicated on other dims)
-    batch_spec = arg_shapes[0].sharding.spec[0]
-    return NamedSharding(mesh, P(batch_spec))
+  logits_spec = topk_logits_sharding.spec
+  batch_axis = logits_spec[0] if len(logits_spec) > 0 else None
+  k_axis = logits_spec[1] if len(logits_spec) > 1 else None
 
-  def partition(mesh, arg_shapes, out_shapes):
-    arg_shardings, out_shardings = jax.tree.map(
-      lambda s: s.sharding, (arg_shapes, out_shapes)
+  # If not sharded on batch axis, no need for shard_map
+  if batch_axis is None:
+    return _top_p_and_sample(
+      topk_logits,
+      topk_idx,
+      rng_key,
+      top_p,
+      temperature,
+      vocab_size=vocab_size,
+      replace_val=replace_val,
+      sampling_eps=sampling_eps,
+      interpret=interpret,
     )
-    batch_axis_name = arg_shardings[0].spec[0]
 
-    def shmap_fn(topk_logits, topk_idx, rng_key, top_p, temperature):
-      # Pass global sharded axis offset to maintain jax.random.categorical sampled values
-      dim0_offset = 0
-      if batch_axis_name is not None:
-        dim0_offset = jax.lax.axis_index(batch_axis_name) * topk_logits.shape[0]
-      return _top_p_and_sample(
-        topk_logits,
-        topk_idx,
-        rng_key,
-        top_p,
-        temperature,
-        vocab_size=vocab_size,
-        replace_val=replace_val,
-        sampling_eps=sampling_eps,
-        interpret=interpret,
-        dim0_offset=dim0_offset,
-      )
+  mesh = topk_logits_sharding.mesh
 
-    return mesh, shmap_fn, out_shardings, arg_shardings
+  def shmap_fn(topk_logits, topk_idx, rng_key, top_p, temperature):
+    # Pass global sharded axis offset to maintain jax.random.categorical sampled values
+    dim0_offset = jax.lax.axis_index(batch_axis) * topk_logits.shape[0]
+    return _top_p_and_sample(
+      topk_logits,
+      topk_idx,
+      rng_key,
+      top_p,
+      temperature,
+      vocab_size=vocab_size,
+      replace_val=replace_val,
+      sampling_eps=sampling_eps,
+      interpret=interpret,
+      dim0_offset=dim0_offset,
+    )
 
-  sharded_top_p_and_sample.def_partition(
-    infer_sharding_from_operands=infer_sharding_from_operands,
-    partition=partition,
-  )
-
-  return sharded_top_p_and_sample(
-    topk_logits, topk_idx, rng_key, top_p, temperature
-  )
+  return jax.shard_map(
+    shmap_fn,
+    mesh=mesh,
+    in_specs=(
+      P(batch_axis, k_axis),  # topk_logits
+      P(batch_axis, k_axis),  # topk_idx
+      P(None, None),          # rng_key (replicated)
+      P(batch_axis),          # top_p
+      P(batch_axis),          # temperature
+    ),
+    out_specs=P(batch_axis),  # output tokens
+    check_vma=False,
+  )(topk_logits, topk_idx, rng_key, top_p, temperature)
